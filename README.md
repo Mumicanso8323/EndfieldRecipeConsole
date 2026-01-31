@@ -1,0 +1,2 @@
+# EndfieldRecipeConsole
+アークナイツ：エンドフィールドのためのコンソールアプリケーション
