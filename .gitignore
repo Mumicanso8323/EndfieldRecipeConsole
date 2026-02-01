@@ -400,7 +400,11 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 *.zip
+=======
+\!make_zip.bat
+>>>>>>> Stashed changes
 =======
 \!make_zip.bat
 >>>>>>> Stashed changes
