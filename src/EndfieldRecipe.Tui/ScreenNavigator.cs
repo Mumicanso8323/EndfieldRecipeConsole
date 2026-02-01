@@ -26,6 +26,7 @@ public sealed class ScreenNavigator {
             var current = _stack.Peek();
             var view = ResolveView(current, context);
             var renderContext = new RenderContext(screen, _measurer);
+            context.SetRenderContext(renderContext);
             renderContext.WriteHeader(UiText.AppTitle, view.Breadcrumb);
             current.Render(renderContext, view, context);
             renderContext.WriteFooter(view.Help, view.Status);
