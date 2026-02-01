@@ -10,7 +10,7 @@ public interface IScreen {
     ScreenResult Handle(Intent intent, ScreenContext context);
 }
 
-public sealed class ScreenContext {
+public sealed class ScreenContext : IRenderContext {
     public ScreenContext(AppData data, IAppRepository repository, NeedHistory history) {
         Data = data;
         Repository = repository;
