@@ -49,7 +49,7 @@ public sealed class RecipesScreen : IScreen {
             var recipe = recipes[i];
             var prefix = i == _selected ? "> " : "  ";
             var name = string.IsNullOrWhiteSpace(recipe.DisplayName) ? recipe.Id : recipe.DisplayName;
-            var outputs = string.Join(", ", recipe.Outputs.Select(o => $"{ResolveItem(context, o.Key)}x{ItemStack.FormatAmount(o.Amount)}"));
+            var outputs = string.Join(", ", recipe.Outputs.Select(o => $"{ResolveItem((ScreenContext)context, o.Key)}x{ItemStack.FormatAmount(o.Amount)}"));
             context.WriteBodyLine(line, $"{prefix}{name} ({outputs})");
             line++;
         }
