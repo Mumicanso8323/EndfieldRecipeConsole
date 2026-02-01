@@ -1,3 +1,4 @@
+using System;
 using EndfieldRecipe.Core.Domain;
 using EndfieldRecipe.Core.Application;
 using EndfieldRecipe.Core.Ports;
@@ -10,7 +11,9 @@ public interface IScreen {
     ScreenResult Handle(Intent intent, ScreenContext context);
 }
 
-public sealed class ScreenContext {
+public sealed class ScreenContext : IRenderContext {
+    private IRenderContext? _renderContext;
+
     public ScreenContext(AppData data, IAppRepository repository, NeedHistory history) {
         Data = data;
         Repository = repository;
@@ -22,6 +25,23 @@ public sealed class ScreenContext {
     public NeedHistory History { get; }
 
     public void Save() => Repository.Save(Data);
+
+    public void SetRenderContext(IRenderContext renderContext) {
+        _renderContext = renderContext ?? throw new ArgumentNullException(nameof(renderContext));
+    }
+
+    private IRenderContext RenderContext =>
+        _renderContext ?? throw new InvalidOperationException("Render context is not set.");
+
+    public int Width => RenderContext.Width;
+    public int Height => RenderContext.Height;
+    public int BodyTop => RenderContext.BodyTop;
+    public int BodyHeight => RenderContext.BodyHeight;
+    public ITextMeasurer Measurer => RenderContext.Measurer;
+    public void Clear() => RenderContext.Clear();
+    public void WriteHeader(string title, string breadcrumb) => RenderContext.WriteHeader(title, breadcrumb);
+    public void WriteFooter(string help, string status = "") => RenderContext.WriteFooter(help, status);
+    public void WriteBodyLine(int line, string text) => RenderContext.WriteBodyLine(line, text);
 }
 
 public sealed class ScreenView {
