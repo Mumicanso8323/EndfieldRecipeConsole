@@ -3,7 +3,7 @@ using EndfieldRecipe.Core.Domain;
 
 namespace EndfieldRecipe.Tui;
 
-public sealed class NeedListScreen : IScreen {
+public sealed class NeedListScreen : IScreen, ITextEntryModeProvider {
     private int _selected;
     private int _offset;
     private InputMode _mode = InputMode.None;
@@ -12,6 +12,7 @@ public sealed class NeedListScreen : IScreen {
     private string _status = string.Empty;
 
     public string Title => UiText.NeedTitle;
+    public bool PreferTextInput => _mode != InputMode.None;
 
     public void Render(IRenderContext context, ScreenView view, ScreenContext screenContext) {
         view.Status = _status;
@@ -21,9 +22,7 @@ public sealed class NeedListScreen : IScreen {
         RenderTable(context, screenContext, targets);
 
         if (_mode != InputMode.None) {
-            view.Status = _mode == InputMode.AddItem
-                ? $"{UiText.InputItemKey}: {_input}"
-                : $"{UiText.InputLineCount}: {_input}";
+            view.Status = $"{UiText.InputLineCount}: {_input}";
         }
     }
 
@@ -32,13 +31,13 @@ public sealed class NeedListScreen : IScreen {
 
         if (intent.Kind == IntentKind.Undo) {
             context.History.Undo(context.Data.NeedPlan);
-            context.Save();
+            context.SaveData();
             return ScreenResult.None();
         }
 
         if (intent.Kind == IntentKind.Redo) {
             context.History.Redo(context.Data.NeedPlan);
-            context.Save();
+            context.SaveData();
             return ScreenResult.None();
         }
 
@@ -59,19 +58,27 @@ public sealed class NeedListScreen : IScreen {
                     _mode = InputMode.EditLine;
                 }
                 break;
-            case IntentKind.Toggle:
+            case IntentKind.Add:
+                return ScreenResult.Push(new ItemPickerScreen(key => {
+                    _pendingItemKey = key;
+                    _mode = InputMode.AddLine;
+                    _input = string.Empty;
+                }));
+            case IntentKind.Remove:
+                RemoveSelected(context, targets);
+                break;
+            case IntentKind.OpenResult:
                 return ScreenResult.Push(new NeedResultScreen());
             case IntentKind.TextInput:
-                if (intent.Char is 'a' or 'A') {
-                    _mode = InputMode.AddItem;
-                    _input = string.Empty;
-                    _pendingItemKey = null;
-                } else if (intent.Char is 'd' or 'D') {
-                    RemoveSelected(context, targets);
-                }
                 break;
             case IntentKind.Back:
                 return ScreenResult.Pop();
+            case IntentKind.JumpTop:
+                _selected = 0;
+                break;
+            case IntentKind.JumpBottom:
+                _selected = Math.Max(0, targets.Count - 1);
+                break;
         }
 
         ClampOffset(context, targets.Count);
@@ -103,19 +110,6 @@ public sealed class NeedListScreen : IScreen {
     }
 
     private ScreenResult CommitInput(ScreenContext context) {
-        if (_mode == InputMode.AddItem) {
-            var key = ResolveItemKey(context, _input);
-            if (key == null) {
-                _status = UiText.ErrorItemNotFound;
-                return ScreenResult.None();
-            }
-
-            _pendingItemKey = key;
-            _mode = InputMode.AddLine;
-            _input = string.Empty;
-            return ScreenResult.None();
-        }
-
         if (!int.TryParse(_input.Trim(), out var lineCount) || lineCount <= 0) {
             _status = UiText.ErrorLineCount;
             return ScreenResult.None();
@@ -126,11 +120,21 @@ public sealed class NeedListScreen : IScreen {
             if (_selected >= 0 && _selected < targets.Count) {
                 var itemKey = targets[_selected].ItemKey;
                 context.History.Execute(context.Data.NeedPlan, new SetLineCountCommand(itemKey, lineCount));
-                context.Save();
+                context.SaveData();
             }
         } else if (_mode == InputMode.AddLine && _pendingItemKey != null) {
+            var existingIndex = context.Data.NeedPlan.Targets
+                .FindIndex(t => string.Equals(t.ItemKey, _pendingItemKey, StringComparison.OrdinalIgnoreCase));
+            if (existingIndex >= 0) {
+                _selected = existingIndex;
+                _input = context.Data.NeedPlan.Targets[existingIndex].LineCount.ToString();
+                _mode = InputMode.EditLine;
+                _pendingItemKey = null;
+                return ScreenResult.None();
+            }
+
             context.History.Execute(context.Data.NeedPlan, new AddTargetCommand(_pendingItemKey, lineCount));
-            context.Save();
+            context.SaveData();
             _selected = context.Data.NeedPlan.Targets.Count - 1;
         }
 
@@ -144,7 +148,7 @@ public sealed class NeedListScreen : IScreen {
         if (targets.Count == 0) return;
         var itemKey = targets[_selected].ItemKey;
         context.History.Execute(context.Data.NeedPlan, new RemoveTargetCommand(itemKey));
-        context.Save();
+        context.SaveData();
         _selected = Math.Min(_selected, Math.Max(0, context.Data.NeedPlan.Targets.Count - 1));
     }
 
@@ -182,15 +186,12 @@ public sealed class NeedListScreen : IScreen {
     }
 
     private string ResolveItemName(ScreenContext context, string key) {
-        return FlowCalculator.ResolveItemName(context.Data, key);
-    }
-
-    private string? ResolveItemKey(ScreenContext context, string input) {
-        var raw = input.Trim();
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-        if (context.Data.Items.ContainsKey(raw)) return raw;
-        var match = context.Data.Items.Values.FirstOrDefault(i => i.DisplayName.Equals(raw, StringComparison.OrdinalIgnoreCase));
-        return match?.Key;
+        var name = FlowCalculator.ResolveItemName(context.Data, key);
+        if (string.IsNullOrWhiteSpace(name)) name = key;
+        if (!context.Settings.HideInternalKeys) {
+            name = $"{name} ({key})";
+        }
+        return name;
     }
 
     private void ClampOffset(IRenderContext context, int count) {
@@ -203,7 +204,6 @@ public sealed class NeedListScreen : IScreen {
 
     private enum InputMode {
         None,
-        AddItem,
         AddLine,
         EditLine
     }

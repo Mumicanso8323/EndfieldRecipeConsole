@@ -8,10 +8,14 @@ public static class Program {
     public static void Main(string[] args) {
         Console.OutputEncoding = Encoding.UTF8;
         var dataPath = args.Length > 0 ? args[0] : "data.json";
+        var dataDirectory = Path.GetDirectoryName(Path.GetFullPath(dataPath)) ?? ".";
+        var settingsPath = Path.Combine(dataDirectory, "settings.json");
+        var settingsRepository = new JsonSettingsRepository(settingsPath);
+        var settings = settingsRepository.Load();
         var repository = new JsonAppRepository(dataPath);
         var data = repository.Load();
-        var history = new NeedHistory(3);
-        var context = new ScreenContext(data, repository, history);
+        var history = new NeedHistory(settings.HistoryDepth);
+        var context = new ScreenContext(data, repository, history, settings, settingsRepository);
 
         try {
             var navigator = new ScreenNavigator(new HomeScreen());

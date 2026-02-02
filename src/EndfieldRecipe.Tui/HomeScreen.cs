@@ -6,7 +6,10 @@ public sealed class HomeScreen : IScreen {
         UiText.MachinesTitle,
         UiText.RecipesTitle,
         UiText.NeedTitle,
-        "終了"
+        UiText.OptimizationTitle,
+        UiText.SettingsTitle,
+        UiText.DiagnosticsTitle,
+        UiText.ExitTitle
     };
 
     private int _selected;
@@ -34,7 +37,10 @@ public sealed class HomeScreen : IScreen {
                     1 => ScreenResult.Push(new MachinesScreen()),
                     2 => ScreenResult.Push(new RecipesScreen()),
                     3 => ScreenResult.Push(new NeedListScreen()),
-                    4 => ScreenResult.Exit(),
+                    4 => ScreenResult.Push(new OptimizationInputScreen()),
+                    5 => ScreenResult.Push(new SettingsScreen()),
+                    6 => ScreenResult.Push(new DiagnosticsScreen()),
+                    7 => ScreenResult.Exit(),
                     _ => ScreenResult.None()
                 };
             case IntentKind.Back:

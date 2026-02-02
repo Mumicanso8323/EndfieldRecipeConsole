@@ -17,5 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../EndfieldRecipe.Tui/EndfieldRecipe.Tui.csproj" />
+    <ProjectReference Include="../EndfieldRecipe.Core.Application/EndfieldRecipe.Core.Application.csproj" />
+    <ProjectReference Include="../EndfieldRecipe.Infra/EndfieldRecipe.Infra.csproj" />
   </ItemGroup>
 </Project>

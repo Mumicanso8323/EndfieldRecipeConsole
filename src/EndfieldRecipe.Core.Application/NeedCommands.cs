@@ -79,41 +79,19 @@ public sealed class RemoveTargetCommand : INeedCommand {
     }
 }
 
-public sealed class SetRecipeChoiceCommand : INeedCommand {
-    private readonly string _itemKey;
-    private readonly string? _recipeId;
-    private string? _previous;
-
-    public SetRecipeChoiceCommand(string itemKey, string? recipeId) {
-        _itemKey = itemKey;
-        _recipeId = recipeId;
-    }
-
-    public void Do(NeedPlan plan) {
-        plan.RecipeChoiceByItem.TryGetValue(_itemKey, out _previous);
-        if (_recipeId == null) {
-            plan.RecipeChoiceByItem.Remove(_itemKey);
-        } else {
-            plan.RecipeChoiceByItem[_itemKey] = _recipeId;
-        }
-    }
-
-    public void Undo(NeedPlan plan) {
-        if (_previous == null) {
-            plan.RecipeChoiceByItem.Remove(_itemKey);
-        } else {
-            plan.RecipeChoiceByItem[_itemKey] = _previous;
-        }
-    }
-}
-
 public sealed class NeedHistory {
-    private readonly int _maxDepth;
+    private int _maxDepth;
     private readonly Stack<INeedCommand> _undo = new();
     private readonly Stack<INeedCommand> _redo = new();
 
     public NeedHistory(int maxDepth = 3) {
         _maxDepth = maxDepth;
+    }
+
+    public void ResetDepth(int maxDepth) {
+        _maxDepth = Math.Max(1, maxDepth);
+        _undo.Clear();
+        _redo.Clear();
     }
 
     public void Execute(NeedPlan plan, INeedCommand command) {

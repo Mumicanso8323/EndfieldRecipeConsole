@@ -17,7 +17,7 @@ public sealed class NeedResultScreen : IScreen {
         var solver = new NeedSolver(screenContext.Data);
         var result = solver.Solve(screenContext.Data.NeedPlan);
         _treeLines.Clear();
-        BuildTreeLines(screenContext.Data, result.TreeRoots, string.Empty, 0);
+        BuildTreeLines(screenContext, result.TreeRoots, string.Empty, 0);
         _bodyHeight = context.BodyHeight;
         if (_selectedTreeIndex >= _treeLines.Count) {
             _selectedTreeIndex = Math.Max(0, _treeLines.Count - 1);
@@ -30,13 +30,13 @@ public sealed class NeedResultScreen : IScreen {
     public ScreenResult Handle(Intent intent, ScreenContext context) {
         if (intent.Kind == IntentKind.Undo) {
             context.History.Undo(context.Data.NeedPlan);
-            context.Save();
+            context.SaveData();
             return ScreenResult.None();
         }
 
         if (intent.Kind == IntentKind.Redo) {
             context.History.Redo(context.Data.NeedPlan);
-            context.Save();
+            context.SaveData();
             return ScreenResult.None();
         }
 
@@ -47,12 +47,17 @@ public sealed class NeedResultScreen : IScreen {
             case IntentKind.MoveDown:
                 _selectedTreeIndex = Math.Min(Math.Max(0, _treeLines.Count - 1), _selectedTreeIndex + 1);
                 break;
-            case IntentKind.Confirm:
-            case IntentKind.Toggle:
+            case IntentKind.ToggleExpand:
                 ToggleSelected();
                 break;
             case IntentKind.Back:
                 return ScreenResult.Pop();
+            case IntentKind.JumpTop:
+                _selectedTreeIndex = 0;
+                break;
+            case IntentKind.JumpBottom:
+                _selectedTreeIndex = Math.Max(0, _treeLines.Count - 1);
+                break;
         }
 
         ClampOffset();
@@ -78,7 +83,7 @@ public sealed class NeedResultScreen : IScreen {
     private List<string> BuildDisplayLines(ScreenContext context, NeedResult result) {
         var lines = new List<string> { UiText.LabelOut };
         foreach (var summary in result.OutSummary) {
-            var name = FlowCalculator.ResolveItemName(context.Data, summary.ItemKey);
+            var name = ResolveItemName(context, summary.ItemKey);
             lines.Add($"  {name} | {summary.LineCount} | {summary.FlowPerMin:G29}");
         }
 
@@ -88,7 +93,7 @@ public sealed class NeedResultScreen : IScreen {
             lines.Add($"  {UiText.StatusEmpty}");
         } else {
             foreach (var summary in result.InSummary) {
-                var name = FlowCalculator.ResolveItemName(context.Data, summary.ItemKey);
+                var name = ResolveItemName(context, summary.ItemKey);
                 lines.Add($"  {name} | {summary.FlowPerMin:G29}");
             }
         }
@@ -106,20 +111,21 @@ public sealed class NeedResultScreen : IScreen {
         return lines;
     }
 
-    private void BuildTreeLines(AppData data, List<RecipeNode> nodes, string path, int depth) {
+    private void BuildTreeLines(ScreenContext screenContext, List<RecipeNode> nodes, string path, int depth) {
         for (var i = 0; i < nodes.Count; i++) {
             var node = nodes[i];
             var nodeId = string.IsNullOrEmpty(path) ? i.ToString() : $"{path}.{i}";
             var indent = new string(' ', depth * 2);
             var marker = node.Children.Count > 0 ? (_collapsed.Contains(nodeId) ? "[+]" : "[-]") : "[ ]";
-            var outputs = string.Join(", ", node.Outputs.Select(o => $"{FlowCalculator.ResolveItemName(data, o.ItemKey)}:{o.FlowPerMin:G29}"));
-            var inputs = string.Join(", ", node.Inputs.Select(i => $"{FlowCalculator.ResolveItemName(data, i.ItemKey)}:{i.FlowPerMin:G29}"));
-            var cyclic = node.IsCyclic ? " (循環)" : string.Empty;
-            var text = $"{indent}{marker} {node.MachineType} x{node.MachineCount:G29} {node.RecipeName} 出:{outputs} 入:{inputs}{cyclic}";
+            var outputs = string.Join(", ", node.Outputs.Select(o => $"{ResolveItemName(screenContext, o.ItemKey)}:{o.FlowPerMin:G29}"));
+            var inputs = string.Join(", ", node.Inputs.Select(i => $"{ResolveItemName(screenContext, i.ItemKey)}:{i.FlowPerMin:G29}"));
+            var cyclic = node.IsCyclic ? UiText.LabelCyclic : string.Empty;
+            var machineLabel = ResolveMachineName(screenContext, node.MachineType);
+            var text = $"{indent}{marker} {machineLabel} x{node.MachineCount:G29} {UiText.LabelOut}:{outputs} {UiText.LabelIn}:{inputs}{cyclic}";
             _treeLines.Add(new TreeLine(nodeId, text, node.Children.Count > 0));
 
             if (node.Children.Count > 0 && !_collapsed.Contains(nodeId)) {
-                BuildTreeLines(data, node.Children, nodeId, depth + 1);
+                BuildTreeLines(screenContext, node.Children, nodeId, depth + 1);
             }
         }
     }
@@ -133,6 +139,23 @@ public sealed class NeedResultScreen : IScreen {
         } else {
             _collapsed.Add(line.Id);
         }
+    }
+
+    private static string ResolveItemName(ScreenContext context, string key) {
+        var name = FlowCalculator.ResolveItemName(context.Data, key);
+        if (string.IsNullOrWhiteSpace(name)) name = key;
+        if (!context.Settings.HideInternalKeys) {
+            name = $"{name} ({key})";
+        }
+        return name;
+    }
+
+    private static string ResolveMachineName(ScreenContext context, string displayName) {
+        if (context.Settings.HideInternalKeys) return displayName;
+        var machine = context.Data.Machines.Values.FirstOrDefault(m =>
+            string.Equals(m.DisplayName, displayName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(m.Key, displayName, StringComparison.OrdinalIgnoreCase));
+        return machine == null ? displayName : $"{displayName} ({machine.Key})";
     }
 
     private void ClampOffset() {

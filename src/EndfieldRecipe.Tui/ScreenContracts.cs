@@ -11,20 +11,41 @@ public interface IScreen {
     ScreenResult Handle(Intent intent, ScreenContext context);
 }
 
+public interface ITextEntryModeProvider {
+    bool PreferTextInput { get; }
+}
+
 public sealed class ScreenContext : IRenderContext {
     private IRenderContext? _renderContext;
+    private ConsoleKeyInfo _lastKeyInfo;
 
-    public ScreenContext(AppData data, IAppRepository repository, NeedHistory history) {
+    public ScreenContext(
+        AppData data,
+        IAppRepository repository,
+        NeedHistory history,
+        AppSettings settings,
+        ISettingsRepository settingsRepository
+    ) {
         Data = data;
         Repository = repository;
         History = history;
+        Settings = settings;
+        SettingsRepository = settingsRepository;
     }
 
     public AppData Data { get; }
     public IAppRepository Repository { get; }
     public NeedHistory History { get; }
+    public AppSettings Settings { get; }
+    public ISettingsRepository SettingsRepository { get; }
+    public ConsoleKeyInfo LastKeyInfo => _lastKeyInfo;
 
-    public void Save() => Repository.Save(Data);
+    public void SetLastKey(ConsoleKeyInfo key) {
+        _lastKeyInfo = key;
+    }
+
+    public void SaveData() => Repository.Save(Data);
+    public void SaveSettings() => SettingsRepository.Save(Settings);
 
     public void SetRenderContext(IRenderContext renderContext) {
         _renderContext = renderContext ?? throw new ArgumentNullException(nameof(renderContext));
