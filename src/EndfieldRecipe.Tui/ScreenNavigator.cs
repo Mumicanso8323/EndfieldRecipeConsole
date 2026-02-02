@@ -33,7 +33,9 @@ public sealed class ScreenNavigator {
             _renderer.Render(screen);
 
             var key = Console.ReadKey(intercept: true);
-            var intent = KeyBinding.FromConsoleKey(key);
+            context.SetLastKey(key);
+            var preferText = current is ITextEntryModeProvider provider && provider.PreferTextInput;
+            var intent = KeyMapper.Map(key, context.Settings, preferText);
             var result = current.Handle(intent, context);
             ApplyResult(result);
         }
@@ -46,9 +48,17 @@ public sealed class ScreenNavigator {
             HomeScreen => new ScreenView(UiText.HomeTitle, UiText.HelpHome, string.Empty),
             NeedListScreen => new ScreenView(UiText.NeedTitle, UiText.HelpNeedList, string.Empty),
             NeedResultScreen => new ScreenView(UiText.NeedResultTitle, UiText.HelpNeedResult, string.Empty),
-            ItemsScreen => new ScreenView(UiText.ItemsTitle, UiText.HelpList, string.Empty),
-            MachinesScreen => new ScreenView(UiText.MachinesTitle, UiText.HelpList, string.Empty),
-            RecipesScreen => new ScreenView(UiText.RecipesTitle, UiText.HelpList, string.Empty),
+            ItemsScreen => new ScreenView(UiText.ItemsTitle, UiText.HelpItems, string.Empty),
+            MachinesScreen => new ScreenView(UiText.MachinesTitle, UiText.HelpMachines, string.Empty),
+            RecipesScreen => new ScreenView(UiText.RecipesTitle, UiText.HelpRecipes, string.Empty),
+            SettingsScreen => new ScreenView(UiText.SettingsTitle, UiText.HelpSettings, string.Empty),
+            KeymapEditorScreen => new ScreenView(UiText.KeymapTitle, UiText.HelpKeymap, string.Empty),
+            DiagnosticsScreen => new ScreenView(UiText.DiagnosticsTitle, UiText.HelpDiagnostics, string.Empty),
+            ItemPickerScreen => new ScreenView(UiText.ItemsTitle, UiText.HelpPicker, string.Empty),
+            MachinePickerScreen => new ScreenView(UiText.MachinesTitle, UiText.HelpPicker, string.Empty),
+            RecipeEditorScreen => new ScreenView(UiText.RecipesTitle, UiText.HelpRecipes, string.Empty),
+            OptimizationInputScreen => new ScreenView(UiText.OptimizationTitle, UiText.HelpOptimizationInput, string.Empty),
+            OptimizationResultScreen => new ScreenView(UiText.OptimizationResultTitle, UiText.HelpOptimizationResult, string.Empty),
             _ => new ScreenView(screen.Title, UiText.HelpList, string.Empty)
         };
     }

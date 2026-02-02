@@ -2,7 +2,6 @@ namespace EndfieldRecipe.Core.Domain;
 
 public sealed class NeedPlan {
     public List<NeedTarget> Targets { get; } = new();
-    public Dictionary<string, string> RecipeChoiceByItem { get; } = new();
 }
 
 public sealed class NeedTarget {

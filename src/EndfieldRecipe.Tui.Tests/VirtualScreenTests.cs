@@ -45,20 +45,44 @@ public sealed class VirtualScreenTests {
         Assert.Equal(1, CountMarkers(screen));
         Assert.Contains("> ", GetBodyLine(screen, context, 0));
 
-        home.Handle(new Intent(IntentKind.MoveDown), new ScreenContext(new AppData(), new FakeRepository(), new NeedHistory()));
+        home.Handle(new Intent(IntentKind.MoveDown), BuildContext());
         RenderHome(screen, context, home, view);
         Assert.Equal(1, CountMarkers(screen));
         Assert.Contains("> ", GetBodyLine(screen, context, 1));
 
-        home.Handle(new Intent(IntentKind.MoveDown), new ScreenContext(new AppData(), new FakeRepository(), new NeedHistory()));
+        home.Handle(new Intent(IntentKind.MoveDown), BuildContext());
         RenderHome(screen, context, home, view);
         Assert.Equal(1, CountMarkers(screen));
         Assert.Contains("> ", GetBodyLine(screen, context, 2));
     }
 
+    [Fact]
+    public void KeyToken_NormalizesControlKey() {
+        var info = new ConsoleKeyInfo('Z', ConsoleKey.Z, shift: false, alt: false, control: true);
+
+        var token = KeyToken.FromConsoleKeyInfo(info);
+
+        Assert.Equal("Ctrl+Z", token);
+    }
+
+    [Fact]
+    public void KeyMapper_PrefersTextInput_WhenRequested() {
+        var info = new ConsoleKeyInfo('a', ConsoleKey.A, shift: false, alt: false, control: false);
+        var settings = new AppSettings();
+
+        var intent = KeyMapper.Map(info, settings, preferTextInput: true);
+
+        Assert.Equal(IntentKind.TextInput, intent.Kind);
+        Assert.Equal('a', intent.Char);
+    }
+
     private static void RenderHome(VirtualScreen screen, RenderContext context, HomeScreen home, ScreenView view) {
         screen.Clear();
-        home.Render(context, view, new ScreenContext(new AppData(), new FakeRepository(), new NeedHistory()));
+        home.Render(context, view, BuildContext());
+    }
+
+    private static ScreenContext BuildContext() {
+        return new ScreenContext(new AppData(), new FakeRepository(), new NeedHistory(), new AppSettings(), new FakeSettingsRepository());
     }
 
     private static int CountMarkers(VirtualScreen screen) {
@@ -73,6 +97,12 @@ public sealed class VirtualScreenTests {
     private sealed class FakeRepository : IAppRepository {
         public AppData Load() => new();
         public void Save(AppData data) {
+        }
+    }
+
+    private sealed class FakeSettingsRepository : ISettingsRepository {
+        public AppSettings Load() => new();
+        public void Save(AppSettings settings) {
         }
     }
 }

@@ -29,7 +29,7 @@ public sealed class NeedSolver {
                 continue;
             }
 
-            var outPerMin = GetOutPerMin(recipe, outMain.Amount);
+            var outPerMin = GetOutPerMin(recipe.MachineKey, outMain.Amount);
             var flow = target.LineCount * outPerMin;
             result.OutSummary.Add(new NeedOutSummary(target.ItemKey, target.LineCount, flow));
 
@@ -53,15 +53,22 @@ public sealed class NeedSolver {
     }
 
     private Recipe? ChooseRecipe(string itemKey, NeedPlan plan) {
-        if (plan.RecipeChoiceByItem.TryGetValue(itemKey, out var recipeId)) {
-            return _data.Recipes.FirstOrDefault(r => r.Id == recipeId);
-        }
+        if (!_recipesByOutput.TryGetValue(itemKey, out var recipes)) return null;
 
-        if (_recipesByOutput.TryGetValue(itemKey, out var recipes)) {
-            return recipes.FirstOrDefault();
-        }
-
-        return null;
+        return recipes
+            .Select(recipe => new {
+                Recipe = recipe,
+                Seconds = ResolveMachineSeconds(recipe.MachineKey),
+                OutputAmount = recipe.Outputs.FirstOrDefault(o => o.Key == itemKey).Amount
+            })
+            .OrderByDescending(entry => entry.Seconds > 0)
+            .ThenByDescending(entry => entry.Seconds > 0 && entry.OutputAmount > 0m
+                ? (60m / entry.Seconds) * entry.OutputAmount
+                : 0m)
+            .ThenBy(entry => entry.Recipe.MachineKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Recipe.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => entry.Recipe)
+            .FirstOrDefault();
     }
 
     private RecipeNode? BuildNode(
@@ -75,10 +82,10 @@ public sealed class NeedSolver {
         if (path.Contains(outputKey)) {
             return new RecipeNode {
                 RecipeId = recipe.Id,
-                RecipeName = ResolveRecipeName(recipe),
+                RecipeName = string.Empty,
                 MachineType = ResolveMachineName(recipe.MachineKey),
                 MachineCount = lineCount,
-                RunsPerMin = lineCount * (60m / recipe.Seconds),
+                RunsPerMin = lineCount * GetRunsPerMin(recipe.MachineKey),
                 IsCyclic = true
             };
         }
@@ -87,10 +94,10 @@ public sealed class NeedSolver {
 
         var node = new RecipeNode {
             RecipeId = recipe.Id,
-            RecipeName = ResolveRecipeName(recipe),
+            RecipeName = string.Empty,
             MachineType = ResolveMachineName(recipe.MachineKey),
             MachineCount = lineCount,
-            RunsPerMin = lineCount * (60m / recipe.Seconds)
+            RunsPerMin = lineCount * GetRunsPerMin(recipe.MachineKey)
         };
 
         var outPerRun = recipe.Outputs.FirstOrDefault(o => o.Key == outputKey).Amount;
@@ -99,7 +106,11 @@ public sealed class NeedSolver {
             return node;
         }
 
-        var rateFactor = lineCount * (60m / recipe.Seconds);
+        var rateFactor = lineCount * GetRunsPerMin(recipe.MachineKey);
+        if (rateFactor <= 0m) {
+            path.Remove(outputKey);
+            return node;
+        }
 
         foreach (var output in recipe.Outputs) {
             node.Outputs.Add(new ItemFlow(output.Key, rateFactor * output.Amount));
@@ -126,7 +137,7 @@ public sealed class NeedSolver {
                 continue;
             }
 
-            var outPerMin = GetOutPerMin(childRecipe, childOutput.Amount);
+            var outPerMin = GetOutPerMin(childRecipe.MachineKey, childOutput.Amount);
             if (outPerMin <= 0m) {
                 AddTo(inSummary, input.Key, flow);
                 continue;
@@ -151,25 +162,35 @@ public sealed class NeedSolver {
         return !_recipesByOutput.ContainsKey(itemKey);
     }
 
-    private static decimal GetOutPerMin(Recipe recipe, decimal outQty) {
-        if (recipe.Seconds <= 0) return 0m;
-        return (60m / recipe.Seconds) * outQty;
+    private decimal GetOutPerMin(string machineKey, decimal outQty) {
+        var seconds = ResolveMachineSeconds(machineKey);
+        if (seconds <= 0) return 0m;
+        return (60m / seconds) * outQty;
     }
 
     private string ResolveMachineName(string machineKey) {
         if (_data.Machines.TryGetValue(machineKey, out var machine)) {
-            return machine.DisplayName;
+            return string.IsNullOrWhiteSpace(machine.DisplayName) ? machine.Key : machine.DisplayName;
         }
         return machineKey;
-    }
-
-    private static string ResolveRecipeName(Recipe recipe) {
-        return string.IsNullOrWhiteSpace(recipe.DisplayName) ? recipe.Id : recipe.DisplayName;
     }
 
     private static void AddTo(Dictionary<string, decimal> map, string key, decimal value) {
         if (!map.TryGetValue(key, out var v)) v = 0m;
         map[key] = v + value;
+    }
+
+    private int ResolveMachineSeconds(string machineKey) {
+        if (_data.Machines.TryGetValue(machineKey, out var machine) && machine.Seconds > 0) {
+            return machine.Seconds;
+        }
+        return 0;
+    }
+
+    private decimal GetRunsPerMin(string machineKey) {
+        var seconds = ResolveMachineSeconds(machineKey);
+        if (seconds <= 0) return 0m;
+        return 60m / seconds;
     }
 
     private static Dictionary<string, List<Recipe>> IndexRecipes(AppData data) {
@@ -189,7 +210,6 @@ public sealed class NeedSolver {
     private static List<RecipeNode> MergeNodes(List<RecipeNode> nodes) {
         var grouped = nodes.GroupBy(n => new {
             n.RecipeId,
-            n.RecipeName,
             n.MachineType
         });
 
@@ -197,7 +217,7 @@ public sealed class NeedSolver {
         foreach (var group in grouped) {
             var mergedNode = new RecipeNode {
                 RecipeId = group.Key.RecipeId,
-                RecipeName = group.Key.RecipeName,
+                RecipeName = string.Empty,
                 MachineType = group.Key.MachineType,
                 MachineCount = group.Sum(x => x.MachineCount),
                 RunsPerMin = group.Sum(x => x.RunsPerMin),
@@ -219,7 +239,6 @@ public sealed class NeedSolver {
         return merged
             .OrderBy(n => n.MachineType, StringComparer.OrdinalIgnoreCase)
             .ThenByDescending(n => n.MachineCount)
-            .ThenBy(n => n.RecipeName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
